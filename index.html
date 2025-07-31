@@ -36,213 +36,247 @@
     <div id="namesDisplay" class="mt-4 text-sm text-gray-700"></div>
   </div>
   <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js';
-    import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js';
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js';
+  import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js';
 
-    console.log('Script loading started...');
+  console.log('Script loading started...');
 
-    // Check for Chart.js availability
-    if (!window.Chart) {
-      console.error('Chart.js failed to load');
-      alert('Failed to load charting library. Please refresh the page.');
+  // Check for Chart.js availability
+  if (!window.Chart) {
+    console.error('Chart.js failed to load');
+    alert('Failed to load charting library. Please refresh the page.');
+  }
+
+  // Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyDeTI9-2w7EDX6MdETSIMnJN9_gWeDBy48",
+    authDomain: "poker-palousa-questionnaire.firebaseapp.com",
+    projectId: "poker-palousa-questionnaire",
+    storageBucket: "poker-palousa-questionnaire.firebasestorage.app",
+    messagingSenderId: "460503139708",
+    appId: "1:460503139708:web:e880fd1413e820bcee90f9",
+    measurementId: "G-T4RC4THG6B"
+  };
+
+  // Initialize Firebase
+  let app, db;
+  function initializeFirebase() {
+    try {
+      app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+      console.log('Firebase initialized successfully');
+      return true;
+    } catch (error) {
+      console.error('Firebase initialization error:', error.code, error.message);
+      alert('Failed to connect to the database. Please try again later.');
+      return false;
+    }
+  }
+
+  let selectedFridays = [];
+  let chartInstance = null;
+  let fridays = [];
+
+  function generateFridayButtons() {
+    console.log('Starting generateFridayButtons...');
+    const container = document.getElementById('fridaysContainer');
+    if (!container) {
+      console.error('Error: fridaysContainer element not found in DOM');
+      alert('Error: Could not load date selection. Please refresh the page.');
+      return;
+    }
+    container.innerHTML = ''; // Clear existing content
+    console.log('Cleared fridaysContainer');
+
+    const startDate = new Date('2025-08-01');
+    const endDate = new Date('2025-12-31');
+    let currentDate = new Date(startDate);
+    let buttonCount = 0;
+    fridays = [];
+
+    while (currentDate <= endDate) {
+      if (currentDate.getDay() === 5) {
+        const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        fridays.push(dateStr);
+        console.log('Creating button for:', dateStr);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'p-1 border border-gray-300 rounded-md text-xs hover:bg-blue-100';
+        button.textContent = dateStr;
+        button.onclick = () => toggleFriday(button, dateStr);
+        container.appendChild(button);
+        buttonCount++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    // Firebase configuration
-    const firebaseConfig = {
-      apiKey: "AIzaSyDeTI9-2w7EDX6MdETSIMnJN9_gWeDBy48",
-      authDomain: "poker-palousa-questionnaire.firebaseapp.com",
-      projectId: "poker-palousa-questionnaire",
-      storageBucket: "poker-palousa-questionnaire.firebasestorage.app",
-      messagingSenderId: "460503139708",
-      appId: "1:460503139708:web:e880fd1413e820bcee90f9",
-      measurementId: "G-T4RC4THG6B"
-    };
+    if (buttonCount === 0) {
+      console.warn('No Friday buttons generated');
+      container.innerHTML = '<p>No Fridays available. Please contact the administrator.</p>';
+    } else {
+      console.log(`Generated ${buttonCount} Friday buttons in 4-column grid (no scrollbar)`);
+    }
+  }
 
-    // Initialize Firebase
-    let app, db;
-    function initializeFirebase() {
-      try {
-        app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        console.log('Firebase initialized successfully');
-        return true;
-      } catch (error) {
-        console.error('Firebase initialization error:', error.code, error.message);
-        alert('Failed to connect to the database. Please try again later.');
-        return false;
-      }
+  function toggleFriday(button, dateStr) {
+    console.log('Toggling date:', dateStr);
+    if (selectedFridays.includes(dateStr)) {
+      selectedFridays = selectedFridays.filter(date => date !== dateStr);
+      button.classList.remove('bg-blue-500', 'text-white');
+    } else {
+      selectedFridays.push(dateStr);
+      button.classList.add('bg-blue-500', 'text-white');
+    }
+    console.log('Current selected Fridays:', selectedFridays);
+  }
+
+  // ADD THIS FUNCTION BACK IN
+  async function submitResponse() {
+    console.log('submitResponse triggered');
+    if (!db) {
+      console.error('Firestore not initialized');
+      alert('Database not connected. Please refresh the page.');
+      return;
+    }
+    const name = document.getElementById('name').value.trim();
+    const comments = document.getElementById('comments').value.trim();
+
+    if (!name || selectedFridays.length === 0) {
+      console.warn('Submission failed: Name or Fridays missing');
+      alert('Please fill in Name and select at least one Friday.');
+      return;
     }
 
-    let selectedFridays = [];
-    let chartInstance = null;
-    let fridays = [];
-
-    function generateFridayButtons() {
-      console.log('Starting generateFridayButtons...');
-      const container = document.getElementById('fridaysContainer');
-      if (!container) {
-        console.error('Error: fridaysContainer element not found in DOM');
-        alert('Error: Could not load date selection. Please refresh the page.');
-        return;
-      }
-      container.innerHTML = ''; // Clear existing content
-      console.log('Cleared fridaysContainer');
-
-      const startDate = new Date('2025-08-01');
-      const endDate = new Date('2025-12-31');
-      let currentDate = new Date(startDate);
-      let buttonCount = 0;
-      fridays = [];
-
-      while (currentDate <= endDate) {
-        if (currentDate.getDay() === 5) {
-          const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          fridays.push(dateStr);
-          console.log('Creating button for:', dateStr);
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'p-1 border border-gray-300 rounded-md text-xs hover:bg-blue-100';
-          button.textContent = dateStr;
-          button.onclick = () => toggleFriday(button, dateStr);
-          container.appendChild(button);
-          buttonCount++;
-        }
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      if (buttonCount === 0) {
-        console.warn('No Friday buttons generated');
-        container.innerHTML = '<p>No Fridays available. Please contact the administrator.</p>';
-      } else {
-        console.log(`Generated ${buttonCount} Friday buttons in 4-column grid (no scrollbar)`);
-      }
-    }
-
-    function toggleFriday(button, dateStr) {
-      console.log('Toggling date:', dateStr);
-      if (selectedFridays.includes(dateStr)) {
-        selectedFridays = selectedFridays.filter(date => date !== dateStr);
+    try {
+      console.log('Submitting to Firestore:', { name, fridays: selectedFridays.join(', '), comments });
+      await addDoc(collection(db, 'responses'), {
+        name,
+        fridays: selectedFridays.join(', '),
+        comments,
+        timestamp: serverTimestamp()
+      });
+      console.log('Response submitted successfully');
+      await renderChart();
+      document.getElementById('name').value = '';
+      document.getElementById('comments').value = '';
+      selectedFridays = [];
+      document.querySelectorAll('#fridaysContainer button').forEach(button => {
         button.classList.remove('bg-blue-500', 'text-white');
-      } else {
-        selectedFridays.push(dateStr);
-        button.classList.add('bg-blue-500', 'text-white');
-      }
-      console.log('Current selected Fridays:', selectedFridays);
+      });
+    } catch (error) {
+      console.error('Error submitting response:', error.code, error.message);
+      alert(`Failed to submit response: ${error.message}. Please try again.`);
+    }
+  }
+
+  async function renderChart() {
+    console.log('Rendering chart...');
+    if (!db) {
+      console.error('Firestore not initialized');
+      alert('Database not connected. Please refresh the page.');
+      return;
+    }
+    const canvas = document.getElementById('responseChart');
+    const namesDisplay = document.getElementById('namesDisplay');
+    if (!canvas || !namesDisplay) {
+      console.error('Chart or names display element not found');
+      return;
     }
 
+    try {
+      const q = query(collection(db, 'responses'), orderBy('timestamp', 'desc'));
+      const snapshot = await getDocs(q);
+      const responses = snapshot.docs.map(doc => doc.data());
+      console.log('Fetched responses:', responses);
 
-    async function renderChart() {
-      console.log('Rendering chart...');
-      if (!db) {
-        console.error('Firestore not initialized');
-        alert('Database not connected. Please refresh the page.');
-        return;
+      const chartData = fridays.map(date => {
+        const count = responses.filter(response => response.fridays.includes(date)).length;
+        const people = responses.filter(response => response.fridays.includes(date));
+        return { date, count, people };
+      });
+      console.log('Chart data:', chartData);
+
+      if (chartInstance) {
+        chartInstance.destroy();
+        console.log('Previous chart instance destroyed');
       }
-      const canvas = document.getElementById('responseChart');
-      const namesDisplay = document.getElementById('namesDisplay');
-      if (!canvas || !namesDisplay) {
-        console.error('Chart or names display element not found');
-        return;
-      }
 
-      try {
-        const q = query(collection(db, 'responses'), orderBy('timestamp', 'desc'));
-        const snapshot = await getDocs(q);
-        const responses = snapshot.docs.map(doc => doc.data());
-        console.log('Fetched responses:', responses);
-
-        // Modify the chartData to include comments
-        const chartData = fridays.map(date => {
-          const count = responses.filter(response => response.fridays.includes(date)).length;
-          // Store the full response object for each person, so we can access their comments later
-          const people = responses.filter(response => response.fridays.includes(date));
-          return { date, count, people }; // people is an array of objects
-        });
-        console.log('Chart data:', chartData);
-
-        if (chartInstance) {
-          chartInstance.destroy();
-          console.log('Previous chart instance destroyed');
-        }
-
-        chartInstance = new Chart(canvas, {
-          type: 'bar',
-          data: {
-            labels: chartData.map(item => item.date),
-            datasets: [{
-              label: 'Number of People Available',
-              data: chartData.map(item => item.count),
-              backgroundColor: '#3b82f6',
-              borderColor: '#2563eb',
-              borderWidth: 1
-            }]
+      chartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: chartData.map(item => item.date),
+          datasets: [{
+            label: 'Number of People Available',
+            data: chartData.map(item => item.count),
+            backgroundColor: '#3b82f6',
+            borderColor: '#2563eb',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1, color: '#4b5563' },
+              grid: { color: '#d1d5db' }
+            },
+            x: {
+              ticks: { maxRotation: 45, minRotation: 45, color: '#4b5563' },
+              grid: { display: false }
+            }
           },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              y: {
-                beginAtZero: true,
-                ticks: { stepSize: 1, color: '#4b5563' },
-                grid: { color: '#d1d5db' }
-              },
-              x: {
-                ticks: { maxRotation: 45, minRotation: 45, color: '#4b5563' },
-                grid: { display: false }
-              }
-            },
-            plugins: {
-              legend: { display: true, labels: { color: '#4b5563' } },
-              tooltip: { enabled: false }
-            },
-            onClick: (event, elements) => {
-              if (elements.length > 0) {
-                const index = elements[0].index;
-                const { date, people } = chartData[index]; // Use 'people' instead of 'names'
-                console.log('Chart clicked:', { date, people });
-                
-                // Create a list of people and their comments
-                const peopleList = people.map(person => {
-                  let commentHtml = '';
-                  // Check if a comment exists and is not empty before displaying it
-                  if (person.comments && person.comments.trim() !== '') {
-                    commentHtml = `<span class="italic text-gray-500"> - "${person.comments}"</span>`;
-                  }
-                  return `<li>${person.name}${commentHtml}</li>`;
-                }).join('');
+          plugins: {
+            legend: { display: true, labels: { color: '#4b5563' } },
+            tooltip: { enabled: false }
+          },
+          onClick: (event, elements) => {
+            if (elements.length > 0) {
+              const index = elements[0].index;
+              const { date, people } = chartData[index];
+              console.log('Chart clicked:', { date, people });
+              
+              const peopleList = people.map(person => {
+                let commentHtml = '';
+                if (person.comments && person.comments.trim() !== '') {
+                  commentHtml = `<span class="italic text-gray-500"> - "${person.comments}"</span>`;
+                }
+                return `<li>${person.name}${commentHtml}</li>`;
+              }).join('');
 
-                namesDisplay.innerHTML = people.length > 0
-                  ? `<p class="font-semibold">${date}:</p><ul class="list-disc pl-4">${peopleList}</ul>`
-                  : `<p class="font-semibold">${date}: No one available</p>`;
-              }
+              namesDisplay.innerHTML = people.length > 0
+                ? `<p class="font-semibold">${date}:</p><ul class="list-disc pl-4">${peopleList}</ul>`
+                : `<p class="font-semibold">${date}: No one available</p>`;
             }
           }
-        });
-        console.log('Chart rendered successfully');
-        namesDisplay.innerHTML = '<p class="text-gray-500">Click a bar to see who is available</p>';
+        }
+      });
+      console.log('Chart rendered successfully');
+      namesDisplay.innerHTML = '<p class="text-gray-500">Click a bar to see who is available</p>';
+    } catch (error) {
+      console.error('Error rendering chart:', error);
+      alert('Failed to render chart. Please try again.');
+    }
+  }
+
+
+  // Initialize on page load
+  window.onload = () => {
+    console.log('Window loaded, initializing...');
+    if (initializeFirebase()) {
+      try {
+        generateFridayButtons();
+        renderChart();
       } catch (error) {
-        console.error('Error rendering chart:', error);
-        alert('Failed to render chart. Please try again.');
+        console.error('Initialization error:', error);
+        alert('Error initializing page. Please refresh.');
       }
     }
+  };
 
-
-    // Initialize on page load
-    window.onload = () => {
-      console.log('Window loaded, initializing...');
-      if (initializeFirebase()) {
-        try {
-          generateFridayButtons();
-          renderChart();
-        } catch (error) {
-          console.error('Initialization error:', error);
-          alert('Error initializing page. Please refresh.');
-        }
-      }
-    };
-
-    // Expose submitResponse globally
-    window.submitResponse = submitResponse;
-  </script>
+  // Expose submitResponse globally
+  window.submitResponse = submitResponse;
+</script>
 </body>
 </html>
