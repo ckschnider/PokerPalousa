@@ -195,6 +195,9 @@
       }
     }
 
+    // Make submitResponse globally accessible
+    window.submitResponse = submitResponse;
+
     // Initialize on page load
     window.onload = () => {
       console.log('Window loaded, initializing...');
