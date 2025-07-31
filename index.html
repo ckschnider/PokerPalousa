@@ -16,7 +16,7 @@
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700">Available Fridays (through Dec 2025, click to select)</label>
-        <div id="fridaysContainer" class="mt-1 grid grid-cols-2 gap-2 max-h-64 overflow-y-auto border border-gray-300 p-2 rounded-md"></div>
+        <div id="fridaysContainer" class="mt-1 grid grid-cols-2 gap-2 max-h-64 overflow-y-auto border border-gray-300 p-2 rounded-md text-sm text-gray-500"></div>
       </div>
       <div>
         <label for="comments" class="block text-sm font-medium text-gray-700">Anything else? (e.g., preferred times, optional)</label>
@@ -55,47 +55,62 @@
 
     // Initialize Firebase
     let app, db;
-    try {
-      app = initializeApp(firebaseConfig);
-      db = getFirestore(app);
-      console.log('Firebase initialized successfully');
-    } catch (error) {
-      console.error('Firebase initialization error:', error);
-      alert('Failed to connect to the database. Please try again later.');
-      return;
+    function initializeFirebase() {
+      try {
+        app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        console.log('Firebase initialized successfully');
+        return true;
+      } catch (error) {
+        console.error('Firebase initialization error:', error.code, error.message);
+        alert('Failed to connect to the database. Please try again later.');
+        return false;
+      }
     }
 
     let selectedFridays = [];
 
     function generateFridayButtons() {
-      console.log('Generating Friday buttons...');
+      console.log('Starting generateFridayButtons...');
       const container = document.getElementById('fridaysContainer');
       if (!container) {
-        console.error('fridaysContainer not found in DOM');
+        console.error('Error: fridaysContainer element not found in DOM');
+        alert('Error: Could not load date selection. Please refresh the page.');
         return;
       }
       container.innerHTML = ''; // Clear existing content
-      const startDate = new Date('2025-08-01'); // Start on first Friday
+      console.log('Cleared fridaysContainer');
+
+      const startDate = new Date('2025-08-01'); // First Friday
       const endDate = new Date('2025-12-31');
       let currentDate = new Date(startDate);
+      let buttonCount = 0;
 
       while (currentDate <= endDate) {
         if (currentDate.getDay() === 5) { // Friday
           const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          console.log('Adding button for:', dateStr);
+          console.log('Creating button for:', dateStr);
           const button = document.createElement('button');
           button.type = 'button';
           button.className = 'p-2 border border-gray-300 rounded-md text-sm hover:bg-blue-100';
           button.textContent = dateStr;
           button.onclick = () => toggleFriday(button, dateStr);
           container.appendChild(button);
+          buttonCount++;
         }
         currentDate.setDate(currentDate.getDate() + 1);
       }
-      console.log('Finished generating buttons');
+
+      if (buttonCount === 0) {
+        console.warn('No Friday buttons generated');
+        container.innerHTML = '<p>No Fridays available. Please contact the administrator.</p>';
+      } else {
+        console.log(`Generated ${buttonCount} Friday buttons`);
+      }
     }
 
     function toggleFriday(button, dateStr) {
+      console.log('Toggling date:', dateStr);
       if (selectedFridays.includes(dateStr)) {
         selectedFridays = selectedFridays.filter(date => date !== dateStr);
         button.classList.remove('bg-blue-500', 'text-white');
@@ -103,19 +118,27 @@
         selectedFridays.push(dateStr);
         button.classList.add('bg-blue-500', 'text-white');
       }
-      console.log('Selected Fridays:', selectedFridays);
+      console.log('Current selected Fridays:', selectedFridays);
     }
 
     async function submitResponse() {
+      console.log('submitResponse triggered');
+      if (!db) {
+        console.error('Firestore not initialized');
+        alert('Database not connected. Please refresh the page.');
+        return;
+      }
       const name = document.getElementById('name').value.trim();
       const comments = document.getElementById('comments').value.trim();
 
       if (!name || selectedFridays.length === 0) {
+        console.warn('Submission failed: Name or Fridays missing');
         alert('Please fill in Name and select at least one Friday.');
         return;
       }
 
       try {
+        console.log('Attempting to submit to Firestore:', { name, fridays: selectedFridays.join(', '), comments });
         await addDoc(collection(db, 'responses'), {
           name,
           fridays: selectedFridays.join(', '),
@@ -132,41 +155,59 @@
           button.classList.remove('bg-blue-500', 'text-white');
         });
       } catch (error) {
-        console.error('Error submitting response:', error);
-        alert('Failed to submit response. Please try again.');
+        console.error('Error submitting response:', error.code, error.message);
+        alert(`Failed to submit response: ${error.message}. Please try again.`);
       }
     }
 
     async function displayResponses() {
+      console.log('Fetching responses...');
+      if (!db) {
+        console.error('Firestore not initialized');
+        alert('Database not connected. Please refresh the page.');
+        return;
+      }
       const tableBody = document.getElementById('responseTable');
       tableBody.innerHTML = '';
       try {
         const q = query(collection(db, 'responses'), orderBy('timestamp', 'desc'));
         const snapshot = await getDocs(q);
-        snapshot.forEach(doc => {
-          const response = doc.data();
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td class="border border-gray-300 p-2">${response.name}</td>
-            <td class="border border-gray-300 p-2">${response.fridays}</td>
-            <td class="border border-gray-300 p-2">${response.comments || '-'}</td>
-          `;
-          tableBody.appendChild(row);
-        });
-        console.log('Responses loaded successfully');
+        if (snapshot.empty) {
+          console.log('No responses found');
+          tableBody.innerHTML = '<tr><td colspan="3" class="border border-gray-300 p-2 text-center">No responses yet</td></tr>';
+        } else {
+          snapshot.forEach(doc => {
+            const response = doc.data();
+            console.log('Response data:', response);
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td class="border border-gray-300 p-2">${response.name}</td>
+              <td class="border border-gray-300 p-2">${response.fridays}</td>
+              <td class="border border-gray-300 p-2">${response.comments || '-'}</td>
+            `;
+            tableBody.appendChild(row);
+          });
+          console.log('Responses loaded successfully');
+        }
       } catch (error) {
-        console.error('Error fetching responses:', error);
-        alert('Failed to load responses.');
+        console.error('Error fetching responses:', error.code, error.message);
+        alert(`Failed to load responses: ${error.message}`);
       }
     }
 
     // Initialize on page load
-    try {
-      generateFridayButtons();
-      displayResponses();
-    } catch (error) {
-      console.error('Initialization error:', error);
-    }
+    window.onload = () => {
+      console.log('Window loaded, initializing...');
+      if (initializeFirebase()) {
+        try {
+          generateFridayButtons();
+          displayResponses();
+        } catch (error) {
+          console.error('Initialization error:', error);
+          alert('Error initializing page. Please refresh.');
+        }
+      }
+    };
   </script>
 </body>
 </html>
