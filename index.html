@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Poker Palousa Dates Questionnaire</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+  <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+    <h1 class="text-2xl font-bold mb-4 text-center">Poker Palousa Dates Questionnaire</h1>
+    <div class="space-y-4">
+      <div>
+        <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
+        <input type="text" id="name" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="Your name" required>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Available Fridays (through Dec 2025, click to select)</label>
+        <div id="fridaysContainer" class="mt-1 grid grid-cols-2 gap-2 max-h-64 overflow-y-auto border border-gray-300 p-2 rounded-md"></div>
+      </div>
+      <div>
+        <label for="comments" class="block text-sm font-medium text-gray-700">Anything else? (e.g., preferred times, optional)</label>
+        <textarea id="comments" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="Optional comments"></textarea>
+      </div>
+      <button onclick="submitResponse()" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Submit</button>
+    </div>
+  </div>
+  <div id="results" class="mt-8 w-full max-w-4xl">
+    <h2 class="text-xl font-bold mb-4">Responses</h2>
+    <table class="w-full border-collapse border border-gray-300">
+      <thead>
+        <tr class="bg-gray-200">
+          <th class="border border-gray-300 p-2">Name</th>
+          <th class="border border-gray-300 p-2">Available Fridays</th>
+          <th class="border border-gray-300 p-2">Comments</th>
+        </tr>
+      </thead>
+      <tbody id="responseTable"></tbody>
+    </table>
+  </div>
+  <script>
+    let responses = JSON.parse(localStorage.getItem('pokerResponses')) || [];
+    let selectedFridays = [];
+
+    function generateFridayButtons() {
+      const container = document.getElementById('fridaysContainer');
+      const today = new Date('2025-07-31');
+      const endDate = new Date('2025-12-31');
+      let currentDate = new Date(today);
+
+      while (currentDate <= endDate) {
+        if (currentDate.getDay() === 5) { // Friday
+          const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'p-2 border border-gray-300 rounded-md text-sm hover:bg-blue-100';
+          button.textContent = dateStr;
+          button.onclick = () => toggleFriday(button, dateStr);
+          container.appendChild(button);
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+
+    function toggleFriday(button, dateStr) {
+      if (selectedFridays.includes(dateStr)) {
+        selectedFridays = selectedFridays.filter(date => date !== dateStr);
+        button.classList.remove('bg-blue-500', 'text-white');
+      } else {
+        selectedFridays.push(dateStr);
+        button.classList.add('bg-blue-500', 'text-white');
+      }
+    }
+
+    function submitResponse() {
+      const name = document.getElementById('name').value.trim();
+      const comments = document.getElementById('comments').value.trim();
+
+      if (!name || selectedFridays.length === 0) {
+        alert('Please fill in Name and select at least one Friday.');
+        return;
+      }
+
+      responses.push({ name, fridays: selectedFridays.join(', '), comments });
+      localStorage.setItem('pokerResponses', JSON.stringify(responses));
+      displayResponses();
+
+      document.getElementById('name').value = '';
+      document.getElementById('comments').value = '';
+      selectedFridays = [];
+      document.querySelectorAll('#fridaysContainer button').forEach(button => {
+        button.classList.remove('bg-blue-500', 'text-white');
+      });
+    }
+
+    function displayResponses() {
+      const tableBody = document.getElementById('responseTable');
+      tableBody.innerHTML = '';
+      responses.forEach(response => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="border border-gray-300 p-2">${response.name}</td>
+          <td class="border border-gray-300 p-2">${response.fridays}</td>
+          <td class="border border-gray-300 p-2">${response.comments || '-'}</td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+
+    window.onload = () => {
+      generateFridayButtons();
+      displayResponses();
+    };
+  </script>
+</body>
+</html>
