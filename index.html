@@ -38,8 +38,24 @@
       <tbody id="responseTable"></tbody>
     </table>
   </div>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js"></script>
   <script>
-    let responses = JSON.parse(localStorage.getItem('pokerResponses')) || [];
+    // Paste your Firebase configuration here
+    const firebaseConfig = {
+      apiKey: "AIzaSyDeTI9-2w7EDX6MdETSIMnJN9_gWeDBy48",
+  authDomain: "poker-palousa-questionnaire.firebaseapp.com",
+  projectId: "poker-palousa-questionnaire",
+  storageBucket: "poker-palousa-questionnaire.firebasestorage.app",
+  messagingSenderId: "460503139708",
+  appId: "1:460503139708:web:e880fd1413e820bcee90f9",
+  measurementId: "G-T4RC4THG6B"
+    };
+
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
     let selectedFridays = [];
 
     function generateFridayButtons() {
@@ -72,7 +88,7 @@
       }
     }
 
-    function submitResponse() {
+    async function submitResponse() {
       const name = document.getElementById('name').value.trim();
       const comments = document.getElementById('comments').value.trim();
 
@@ -81,30 +97,45 @@
         return;
       }
 
-      responses.push({ name, fridays: selectedFridays.join(', '), comments });
-      localStorage.setItem('pokerResponses', JSON.stringify(responses));
-      displayResponses();
+      try {
+        await db.collection('responses').add({
+          name,
+          fridays: selectedFridays.join(', '),
+          comments,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        displayResponses();
 
-      document.getElementById('name').value = '';
-      document.getElementById('comments').value = '';
-      selectedFridays = [];
-      document.querySelectorAll('#fridaysContainer button').forEach(button => {
-        button.classList.remove('bg-blue-500', 'text-white');
-      });
+        document.getElementById('name').value = '';
+        document.getElementById('comments').value = '';
+        selectedFridays = [];
+        document.querySelectorAll('#fridaysContainer button').forEach(button => {
+          button.classList.remove('bg-blue-500', 'text-white');
+        });
+      } catch (error) {
+        console.error('Error submitting response:', error);
+        alert('Failed to submit response. Please try again.');
+      }
     }
 
-    function displayResponses() {
+    async function displayResponses() {
       const tableBody = document.getElementById('responseTable');
       tableBody.innerHTML = '';
-      responses.forEach(response => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td class="border border-gray-300 p-2">${response.name}</td>
-          <td class="border border-gray-300 p-2">${response.fridays}</td>
-          <td class="border border-gray-300 p-2">${response.comments || '-'}</td>
-        `;
-        tableBody.appendChild(row);
-      });
+      try {
+        const snapshot = await db.collection('responses').orderBy('timestamp', 'desc').get();
+        snapshot.forEach(doc => {
+          const response = doc.data();
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td class="border border-gray-300 p-2">${response.name}</td>
+            <td class="border border-gray-300 p-2">${response.fridays}</td>
+            <td class="border border-gray-300 p-2">${response.comments || '-'}</td>
+          `;
+          tableBody.appendChild(row);
+        });
+      } catch (error) {
+        console.error('Error fetching responses:', error);
+      }
     }
 
     window.onload = () => {
