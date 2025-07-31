@@ -130,43 +130,6 @@
       console.log('Current selected Fridays:', selectedFridays);
     }
 
-    async function submitResponse() {
-      console.log('submitResponse triggered');
-      if (!db) {
-        console.error('Firestore not initialized');
-        alert('Database not connected. Please refresh the page.');
-        return;
-      }
-      const name = document.getElementById('name').value.trim();
-      const comments = document.getElementById('comments').value.trim();
-
-      if (!name || selectedFridays.length === 0) {
-        console.warn('Submission failed: Name or Fridays missing');
-        alert('Please fill in Name and select at least one Friday.');
-        return;
-      }
-
-      try {
-        console.log('Submitting to Firestore:', { name, fridays: selectedFridays.join(', '), comments });
-        await addDoc(collection(db, 'responses'), {
-          name,
-          fridays: selectedFridays.join(', '),
-          comments,
-          timestamp: serverTimestamp()
-        });
-        console.log('Response submitted successfully');
-        await renderChart();
-        document.getElementById('name').value = '';
-        document.getElementById('comments').value = '';
-        selectedFridays = [];
-        document.querySelectorAll('#fridaysContainer button').forEach(button => {
-          button.classList.remove('bg-blue-500', 'text-white');
-        });
-      } catch (error) {
-        console.error('Error submitting response:', error.code, error.message);
-        alert(`Failed to submit response: ${error.message}. Please try again.`);
-      }
-    }
 
     async function renderChart() {
       console.log('Rendering chart...');
@@ -188,12 +151,12 @@
         const responses = snapshot.docs.map(doc => doc.data());
         console.log('Fetched responses:', responses);
 
+        // Modify the chartData to include comments
         const chartData = fridays.map(date => {
           const count = responses.filter(response => response.fridays.includes(date)).length;
-          const names = responses
-            .filter(response => response.fridays.includes(date))
-            .map(response => response.name);
-          return { date, count, names };
+          // Store the full response object for each person, so we can access their comments later
+          const people = responses.filter(response => response.fridays.includes(date));
+          return { date, count, people }; // people is an array of objects
         });
         console.log('Chart data:', chartData);
 
@@ -235,10 +198,21 @@
             onClick: (event, elements) => {
               if (elements.length > 0) {
                 const index = elements[0].index;
-                const { date, names } = chartData[index];
-                console.log('Chart clicked:', { date, names });
-                namesDisplay.innerHTML = names.length > 0
-                  ? `<p class="font-semibold">${date}:</p><ul class="list-disc pl-4">${names.map(name => `<li>${name}</li>`).join('')}</ul>`
+                const { date, people } = chartData[index]; // Use 'people' instead of 'names'
+                console.log('Chart clicked:', { date, people });
+                
+                // Create a list of people and their comments
+                const peopleList = people.map(person => {
+                  let commentHtml = '';
+                  // Check if a comment exists and is not empty before displaying it
+                  if (person.comments && person.comments.trim() !== '') {
+                    commentHtml = `<span class="italic text-gray-500"> - "${person.comments}"</span>`;
+                  }
+                  return `<li>${person.name}${commentHtml}</li>`;
+                }).join('');
+
+                namesDisplay.innerHTML = people.length > 0
+                  ? `<p class="font-semibold">${date}:</p><ul class="list-disc pl-4">${peopleList}</ul>`
                   : `<p class="font-semibold">${date}: No one available</p>`;
               }
             }
@@ -251,6 +225,7 @@
         alert('Failed to render chart. Please try again.');
       }
     }
+
 
     // Initialize on page load
     window.onload = () => {
