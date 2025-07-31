@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Poker Palousa Dates Questionnaire</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js"></script>
 </head>
-<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
-  <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+<body class="bg-gray-100 flex flex-col items-center min-h-screen p-4">
+  <div class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md mb-8">
     <h1 class="text-2xl font-bold mb-4 text-center">Poker Palousa Dates Questionnaire</h1>
     <div class="space-y-4">
       <div>
@@ -16,7 +19,7 @@
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700">Available Fridays (through Dec 2025, click to select)</label>
-        <div id="fridaysContainer" class="mt-1 grid grid-cols-2 gap-2 max-h-64 overflow-y-auto border border-gray-300 p-2 rounded-md text-sm text-gray-500"></div>
+        <div id="fridaysContainer" class="mt-1 grid grid-cols-4 gap-1 border border-gray-300 p-2 rounded-md text-xs text-gray-500"></div>
       </div>
       <div>
         <label for="comments" class="block text-sm font-medium text-gray-700">Anything else? (e.g., preferred times, optional)</label>
@@ -25,22 +28,24 @@
       <button onclick="submitResponse()" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Submit</button>
     </div>
   </div>
-  <div id="results" class="mt-8 w-full max-w-4xl">
+  <div class="w-full max-w-4xl">
     <h2 class="text-xl font-bold mb-4">Responses</h2>
-    <table class="w-full border-collapse border border-gray-300">
-      <thead>
-        <tr class="bg-gray-200">
-          <th class="border border-gray-300 p-2">Name</th>
-          <th class="border border-gray-300 p-2">Available Fridays</th>
-          <th class="border border-gray-300 p-2">Comments</th>
-        </tr>
-      </thead>
-      <tbody id="responseTable"></tbody>
-    </table>
+    <div class="relative h-[400px]">
+      <canvas id="responseChart"></canvas>
+    </div>
+    <div id="namesDisplay" class="mt-4 text-sm text-gray-700"></div>
   </div>
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js';
-    import { getFirestore, collection, addDoc, getDocs, orderBy, query, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js';
+    import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js';
+
+    console.log('Script loading started...');
+
+    // Check for Chart.js availability
+    if (!window.Chart) {
+      console.error('Chart.js failed to load');
+      alert('Failed to load charting library. Please refresh the page.');
+    }
 
     // Firebase configuration
     const firebaseConfig = {
@@ -69,6 +74,8 @@
     }
 
     let selectedFridays = [];
+    let chartInstance = null;
+    let fridays = [];
 
     function generateFridayButtons() {
       console.log('Starting generateFridayButtons...');
@@ -81,18 +88,20 @@
       container.innerHTML = ''; // Clear existing content
       console.log('Cleared fridaysContainer');
 
-      const startDate = new Date('2025-08-01'); // First Friday
+      const startDate = new Date('2025-08-01');
       const endDate = new Date('2025-12-31');
       let currentDate = new Date(startDate);
       let buttonCount = 0;
+      fridays = [];
 
       while (currentDate <= endDate) {
-        if (currentDate.getDay() === 5) { // Friday
-          const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        if (currentDate.getDay() === 5) {
+          const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          fridays.push(dateStr);
           console.log('Creating button for:', dateStr);
           const button = document.createElement('button');
           button.type = 'button';
-          button.className = 'p-2 border border-gray-300 rounded-md text-sm hover:bg-blue-100';
+          button.className = 'p-1 border border-gray-300 rounded-md text-xs hover:bg-blue-100';
           button.textContent = dateStr;
           button.onclick = () => toggleFriday(button, dateStr);
           container.appendChild(button);
@@ -105,7 +114,7 @@
         console.warn('No Friday buttons generated');
         container.innerHTML = '<p>No Fridays available. Please contact the administrator.</p>';
       } else {
-        console.log(`Generated ${buttonCount} Friday buttons`);
+        console.log(`Generated ${buttonCount} Friday buttons in 4-column grid (no scrollbar)`);
       }
     }
 
@@ -138,7 +147,7 @@
       }
 
       try {
-        console.log('Attempting to submit to Firestore:', { name, fridays: selectedFridays.join(', '), comments });
+        console.log('Submitting to Firestore:', { name, fridays: selectedFridays.join(', '), comments });
         await addDoc(collection(db, 'responses'), {
           name,
           fridays: selectedFridays.join(', '),
@@ -146,8 +155,7 @@
           timestamp: serverTimestamp()
         });
         console.log('Response submitted successfully');
-        await displayResponses();
-
+        await renderChart();
         document.getElementById('name').value = '';
         document.getElementById('comments').value = '';
         selectedFridays = [];
@@ -160,43 +168,89 @@
       }
     }
 
-    async function displayResponses() {
-      console.log('Fetching responses...');
+    async function renderChart() {
+      console.log('Rendering chart...');
       if (!db) {
         console.error('Firestore not initialized');
         alert('Database not connected. Please refresh the page.');
         return;
       }
-      const tableBody = document.getElementById('responseTable');
-      tableBody.innerHTML = '';
+      const canvas = document.getElementById('responseChart');
+      const namesDisplay = document.getElementById('namesDisplay');
+      if (!canvas || !namesDisplay) {
+        console.error('Chart or names display element not found');
+        return;
+      }
+
       try {
         const q = query(collection(db, 'responses'), orderBy('timestamp', 'desc'));
         const snapshot = await getDocs(q);
-        if (snapshot.empty) {
-          console.log('No responses found');
-          tableBody.innerHTML = '<tr><td colspan="3" class="border border-gray-300 p-2 text-center">No responses yet</td></tr>';
-        } else {
-          snapshot.forEach(doc => {
-            const response = doc.data();
-            console.log('Response data:', response);
-            const row = document.createElement('tr');
-            row.innerHTML = `
-              <td class="border border-gray-300 p-2">${response.name}</td>
-              <td class="border border-gray-300 p-2">${response.fridays}</td>
-              <td class="border border-gray-300 p-2">${response.comments || '-'}</td>
-            `;
-            tableBody.appendChild(row);
-          });
-          console.log('Responses loaded successfully');
+        const responses = snapshot.docs.map(doc => doc.data());
+        console.log('Fetched responses:', responses);
+
+        const chartData = fridays.map(date => {
+          const count = responses.filter(response => response.fridays.includes(date)).length;
+          const names = responses
+            .filter(response => response.fridays.includes(date))
+            .map(response => response.name);
+          return { date, count, names };
+        });
+        console.log('Chart data:', chartData);
+
+        if (chartInstance) {
+          chartInstance.destroy();
+          console.log('Previous chart instance destroyed');
         }
+
+        chartInstance = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: chartData.map(item => item.date),
+            datasets: [{
+              label: 'Number of People Available',
+              data: chartData.map(item => item.count),
+              backgroundColor: '#3b82f6',
+              borderColor: '#2563eb',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                ticks: { stepSize: 1, color: '#4b5563' },
+                grid: { color: '#d1d5db' }
+              },
+              x: {
+                ticks: { maxRotation: 45, minRotation: 45, color: '#4b5563' },
+                grid: { display: false }
+              }
+            },
+            plugins: {
+              legend: { display: true, labels: { color: '#4b5563' } },
+              tooltip: { enabled: false }
+            },
+            onClick: (event, elements) => {
+              if (elements.length > 0) {
+                const index = elements[0].index;
+                const { date, names } = chartData[index];
+                console.log('Chart clicked:', { date, names });
+                namesDisplay.innerHTML = names.length > 0
+                  ? `<p class="font-semibold">${date}:</p><ul class="list-disc pl-4">${names.map(name => `<li>${name}</li>`).join('')}</ul>`
+                  : `<p class="font-semibold">${date}: No one available</p>`;
+              }
+            }
+          }
+        });
+        console.log('Chart rendered successfully');
+        namesDisplay.innerHTML = '<p class="text-gray-500">Click a bar to see who is available</p>';
       } catch (error) {
-        console.error('Error fetching responses:', error.code, error.message);
-        alert(`Failed to load responses: ${error.message}`);
+        console.error('Error rendering chart:', error);
+        alert('Failed to render chart. Please try again.');
       }
     }
-
-    // Make submitResponse globally accessible
-    window.submitResponse = submitResponse;
 
     // Initialize on page load
     window.onload = () => {
@@ -204,13 +258,16 @@
       if (initializeFirebase()) {
         try {
           generateFridayButtons();
-          displayResponses();
+          renderChart();
         } catch (error) {
           console.error('Initialization error:', error);
           alert('Error initializing page. Please refresh.');
         }
       }
     };
+
+    // Expose submitResponse globally
+    window.submitResponse = submitResponse;
   </script>
 </body>
 </html>
