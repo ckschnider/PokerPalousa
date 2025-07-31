@@ -38,35 +38,51 @@
       <tbody id="responseTable"></tbody>
     </table>
   </div>
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js"></script>
-  <script>
-    // Paste your Firebase configuration here
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js';
+    import { getFirestore, collection, addDoc, getDocs, orderBy, query, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js';
+
+    // Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyDeTI9-2w7EDX6MdETSIMnJN9_gWeDBy48",
-  authDomain: "poker-palousa-questionnaire.firebaseapp.com",
-  projectId: "poker-palousa-questionnaire",
-  storageBucket: "poker-palousa-questionnaire.firebasestorage.app",
-  messagingSenderId: "460503139708",
-  appId: "1:460503139708:web:e880fd1413e820bcee90f9",
-  measurementId: "G-T4RC4THG6B"
+      authDomain: "poker-palousa-questionnaire.firebaseapp.com",
+      projectId: "poker-palousa-questionnaire",
+      storageBucket: "poker-palousa-questionnaire.firebasestorage.app",
+      messagingSenderId: "460503139708",
+      appId: "1:460503139708:web:e880fd1413e820bcee90f9",
+      measurementId: "G-T4RC4THG6B"
     };
 
     // Initialize Firebase
-    const app = firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    let app, db;
+    try {
+      app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+      console.log('Firebase initialized successfully');
+    } catch (error) {
+      console.error('Firebase initialization error:', error);
+      alert('Failed to connect to the database. Please try again later.');
+      return;
+    }
 
     let selectedFridays = [];
 
     function generateFridayButtons() {
+      console.log('Generating Friday buttons...');
       const container = document.getElementById('fridaysContainer');
-      const today = new Date('2025-07-31');
+      if (!container) {
+        console.error('fridaysContainer not found in DOM');
+        return;
+      }
+      container.innerHTML = ''; // Clear existing content
+      const startDate = new Date('2025-08-01'); // Start on first Friday
       const endDate = new Date('2025-12-31');
-      let currentDate = new Date(today);
+      let currentDate = new Date(startDate);
 
       while (currentDate <= endDate) {
         if (currentDate.getDay() === 5) { // Friday
           const dateStr = currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          console.log('Adding button for:', dateStr);
           const button = document.createElement('button');
           button.type = 'button';
           button.className = 'p-2 border border-gray-300 rounded-md text-sm hover:bg-blue-100';
@@ -76,6 +92,7 @@
         }
         currentDate.setDate(currentDate.getDate() + 1);
       }
+      console.log('Finished generating buttons');
     }
 
     function toggleFriday(button, dateStr) {
@@ -86,6 +103,7 @@
         selectedFridays.push(dateStr);
         button.classList.add('bg-blue-500', 'text-white');
       }
+      console.log('Selected Fridays:', selectedFridays);
     }
 
     async function submitResponse() {
@@ -98,13 +116,14 @@
       }
 
       try {
-        await db.collection('responses').add({
+        await addDoc(collection(db, 'responses'), {
           name,
           fridays: selectedFridays.join(', '),
           comments,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+          timestamp: serverTimestamp()
         });
-        displayResponses();
+        console.log('Response submitted successfully');
+        await displayResponses();
 
         document.getElementById('name').value = '';
         document.getElementById('comments').value = '';
@@ -122,7 +141,8 @@
       const tableBody = document.getElementById('responseTable');
       tableBody.innerHTML = '';
       try {
-        const snapshot = await db.collection('responses').orderBy('timestamp', 'desc').get();
+        const q = query(collection(db, 'responses'), orderBy('timestamp', 'desc'));
+        const snapshot = await getDocs(q);
         snapshot.forEach(doc => {
           const response = doc.data();
           const row = document.createElement('tr');
@@ -133,15 +153,20 @@
           `;
           tableBody.appendChild(row);
         });
+        console.log('Responses loaded successfully');
       } catch (error) {
         console.error('Error fetching responses:', error);
+        alert('Failed to load responses.');
       }
     }
 
-    window.onload = () => {
+    // Initialize on page load
+    try {
       generateFridayButtons();
       displayResponses();
-    };
+    } catch (error) {
+      console.error('Initialization error:', error);
+    }
   </script>
 </body>
 </html>
